@@ -116,6 +116,13 @@ protected:
   /* Spinonce maximum work timeout */
   uint32_t spin_timeout_;
 
+  /* Some variables to deal with micros() overflow after 72min.*/
+  uint32_t mus_now_previous_;
+  uint64_t mus_now_;
+  uint32_t mus_setNow_previous_;
+  uint64_t mus_setNow_;
+
+
   uint8_t message_in[INPUT_SIZE];
   uint8_t message_out[OUTPUT_SIZE];
 
@@ -393,19 +400,27 @@ public:
 
   Time now()
   {
-    uint64_t mus = hardware_.time_micros();
+    uint32_t mus = hardware_.time_micros();
+    uint32_t mus_delta = mus - mus_now_previous_;
+    mus_now_ += mus_delta;
+    mus_now_previous_ = mus;
+
     Time current_time;
-    current_time.sec = mus / 1000000UL + sec_offset;
-    current_time.nsec = (mus % 1000000UL) * 1000 + nsec_offset;
+    current_time.sec = mus_now_ / 1000000UL + sec_offset;
+    current_time.nsec = (mus_now_ % 1000000UL) * 1000 + nsec_offset;
     normalizeSecNSec(current_time.sec, current_time.nsec);
     return current_time;
   }
 
   void setNow(Time & new_now)
   {
-    uint64_t mus = hardware_.time_micros();
-    sec_offset = new_now.sec - mus / 1000000UL - 1;
-    nsec_offset = new_now.nsec - (mus % 1000000UL) * 1000UL + 1000000000UL;
+    uint32_t mus = hardware_.time_micros();
+    uint32_t mus_delta = mus - mus_setNow_previous_;
+    mus_setNow_ += mus_delta;
+    mus_setNow_previous_ = mus;
+
+    sec_offset = new_now.sec - mus_setNow_ / 1000000UL - 1;
+    nsec_offset = new_now.nsec - (mus_setNow_ % 1000000UL) * 1000UL + 1000000000UL;
     normalizeSecNSec(sec_offset, nsec_offset);
   }
 
