@@ -404,7 +404,7 @@ public:
   void setNow(Time & new_now)
   {
     uint64_t mus = hardware_.time_micros();
-    sec_offset = new_now.sec - mus_ / 1000000UL - 1;
+    sec_offset = new_now.sec - mus / 1000000UL - 1;
     nsec_offset = new_now.nsec - (mus % 1000000UL) * 1000UL + 1000000000UL;
     normalizeSecNSec(sec_offset, nsec_offset);
   }
