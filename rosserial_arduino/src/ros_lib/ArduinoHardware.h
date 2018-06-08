@@ -67,8 +67,8 @@ class ArduinoHardware {
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
       iostream = io;
       baud_ = baud;
-      // mus_now_ = 0ULL;
-      // mus_prev_ = 0ULL;
+      mus_now_ = 0ULL;
+      mus_prev_ = 0ULL;
     }
     ArduinoHardware()
     {
