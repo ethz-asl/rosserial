@@ -108,20 +108,20 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
-    unsigned long time_micros(){return micros();}
-    // unsigned long long time_micros() {
-    //   uint32_t mus = micros();
-    //   mus_now_ += (mus - mus_prev_);
-    //   mus_prev_ = mus;
-    //   return mus_now_;
-    // }
+    unsigned long long time_micros() {
+      uint32_t mus = micros();
+      uint32_t mus_delta = mus - mus_prev_;
+      mus_now_ += mus_delta;
+      mus_prev_ = mus;
+      return mus_now_;
+    }
 
   protected:
     SERIAL_CLASS* iostream;
     long baud_;
-  // private:
-  //   uint64_t mus_now_;
-  //   uint32_t mus_prev_;
+  private:
+    uint64_t mus_now_;
+    uint32_t mus_prev_;
 };
 
 #endif
