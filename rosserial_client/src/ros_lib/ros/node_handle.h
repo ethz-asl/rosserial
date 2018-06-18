@@ -393,7 +393,7 @@ public:
 
   Time now()
   {
-    uint64_t mus = hardware_.time_micros();
+    uint64_t mus = hardware_.time_micros_true();
     Time current_time;
     current_time.sec = mus / 1000000UL + sec_offset;
     current_time.nsec = (mus % 1000000UL) * 1000 + nsec_offset;
@@ -403,7 +403,7 @@ public:
 
   void setNow(Time & new_now)
   {
-    uint64_t mus = hardware_.time_micros();
+    uint64_t mus = hardware_.time_micros_true();
     sec_offset = new_now.sec - mus / 1000000UL - 1;
     nsec_offset = new_now.nsec - (mus % 1000000UL) * 1000UL + 1000000000UL;
     normalizeSecNSec(sec_offset, nsec_offset);
