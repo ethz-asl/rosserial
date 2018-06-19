@@ -381,7 +381,7 @@ public:
   void syncTime(uint8_t * data)
   {
     std_msgs::Time t;
-    uint64_t offset = hardware_.time_micros() - rt_time_micros;
+    uint64_t offset = hardware_.time_micros_true() - rt_time_micros;
 
     t.deserialize(data);
     t.data.sec += offset / 1000000UL;
