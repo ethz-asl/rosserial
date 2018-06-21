@@ -62,6 +62,8 @@
   #define SERIAL_CLASS HardwareSerial
 #endif
 
+#include <util/atomic.h>
+
 class ArduinoHardware {
   public:
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
@@ -108,14 +110,19 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
-    unsigned long long time_micros_true() {
-      uint32_t mus = micros();
-      uint32_t mus_delta = mus - mus_prev_;
-      mus_now_ += mus_delta;
-      mus_prev_ = mus;
+    unsigned long long time_micros() {
+      ATOMIC_BLOCK(ATOMIC_FORCEON) {
+        static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
+            "Size of unsigned long long is not equal to uint64_t.");
+        static_assert(sizeof(unsigned long) == sizeof(uint32_t),
+            "Size of unsigned long is not equal to uint32_t.");
+        uint32_t mus = micros();
+        uint32_t mus_delta = mus - mus_prev_;
+        mus_now_ += mus_delta;
+        mus_prev_ = mus;
+      }
       return mus_now_;
     }
-    unsigned long time_micros() {return micros();}
 
   protected:
     SERIAL_CLASS* iostream;
