@@ -67,8 +67,6 @@ class ArduinoHardware {
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
       iostream = io;
       baud_ = baud;
-      // mus_now_ = 0ULL;
-      // mus_prev_ = 0ULL;
     }
     ArduinoHardware()
     {
@@ -109,19 +107,10 @@ class ArduinoHardware {
 
     unsigned long time(){return millis();}
     unsigned long time_micros(){return micros();}
-    // unsigned long long time_micros() {
-    //   uint32_t mus = micros();
-    //   mus_now_ += (mus - mus_prev_);
-    //   mus_prev_ = mus;
-    //   return mus_now_;
-    // }
 
   protected:
     SERIAL_CLASS* iostream;
     long baud_;
-  // private:
-  //   uint64_t mus_now_;
-  //   uint32_t mus_prev_;
 };
 
 #endif
