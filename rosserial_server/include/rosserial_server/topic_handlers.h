@@ -41,6 +41,11 @@
 #include <rosserial_msgs/RequestServiceInfo.h>
 #include <topic_tools/shape_shifter.h>
 
+#include <fm_comm/ImuMicro.h>
+#include <fm_comm/LidarMicro.h>
+#include <fm_comm/TimeNumbered.h>
+#include <fm_comm/ULandingMicro.h>
+
 namespace rosserial_server
 {
 
@@ -68,6 +73,65 @@ public:
 
     message_.morph(topic_info.md5sum, topic_info.message_type, info.response.definition, "false");
     publisher_ = message_.advertise(nh, topic_info.topic_name, 1);
+  }
+
+  template <typename T>
+  void translateMsg(T msg, ros::Time* receive_stamp, std::shared_ptr<
+      cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime> device_time_translator) {
+
+      // Translate timestamp
+      msg->translated_stamp.data = device_time_translator->update(msg->event_stamp, msg->transmit_stamp, *receive_stamp);
+
+      // Serialize.
+      ros::SerializedMessage ser_msg = ros::serialization::serializeMessage(*msg);
+      ros::serialization::IStream stream(ser_msg.message_start, ser_msg.num_bytes);
+      ros::serialization::Serializer<topic_tools::ShapeShifter>::read(stream, message_);
+  }
+
+  void handleWithReceiveTime(ros::serialization::IStream stream, ros::Time* receive_stamp, std::shared_ptr<
+      cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime> device_time_translator) {
+    // Deserialize message.
+    ros::serialization::Serializer<topic_tools::ShapeShifter>::read(stream, message_);
+
+    // Try casting and translating timestamp.
+    fm_comm::ImuMicroPtr imu_msg = nullptr;
+    try {
+      imu_msg = message_.instantiate<fm_comm::ImuMicro>();
+    } catch (const topic_tools::ShapeShifterException& e) {
+    }
+    if (imu_msg) {
+      translateMsg<fm_comm::ImuMicroPtr>(imu_msg, receive_stamp, device_time_translator);
+    }
+
+    fm_comm::LidarMicroPtr lidar_msg = nullptr;
+    try {
+      lidar_msg = message_.instantiate<fm_comm::LidarMicro>();
+    } catch (const topic_tools::ShapeShifterException& e) {
+    }
+    if (lidar_msg) {
+      translateMsg<fm_comm::LidarMicroPtr>(lidar_msg, receive_stamp, device_time_translator);
+    }
+
+    fm_comm::TimeNumberedPtr time_msg = nullptr;
+    try {
+      time_msg = message_.instantiate<fm_comm::TimeNumbered>();
+    } catch (const topic_tools::ShapeShifterException& e) {
+    }
+    if (time_msg) {
+      translateMsg<fm_comm::TimeNumberedPtr>(time_msg, receive_stamp, device_time_translator);
+    }
+
+    fm_comm::ULandingMicroPtr ulanding_msg = nullptr;
+    try {
+      ulanding_msg = message_.instantiate<fm_comm::ULandingMicro>();
+    } catch (const topic_tools::ShapeShifterException& e) {
+    }
+    if (ulanding_msg) {
+      translateMsg<fm_comm::ULandingMicroPtr>(ulanding_msg, receive_stamp, device_time_translator);
+    }
+
+    // Publish.
+    publisher_.publish(message_);
   }
 
   void handle(ros::serialization::IStream stream) {

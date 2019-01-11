@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(rosserial_server)
 
+add_definitions(-std=c++11)
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rosserial_msgs
   std_msgs
   topic_tools
+  cuckoo_time_translator
+  fm_comm
 )
 
 find_package(Boost REQUIRED COMPONENTS
@@ -20,6 +24,8 @@ catkin_package(
     rosserial_msgs
     std_msgs
     topic_tools
+    cuckoo_time_translator
+    fm_comm
 )
 
 include_directories(
