@@ -46,8 +46,14 @@
 #include <fm_comm/TimeNumbered.h>
 #include <fm_comm/ULandingMicro.h>
 
+#include <memory>
+#include <cuckoo_time_translator/ClockParameters.h>
+#include <cuckoo_time_translator/DeviceTimeTranslator.h>
+
 namespace rosserial_server
 {
+
+namespace ctt = cuckoo_time_translator;
 
 class Publisher {
 public:
@@ -73,23 +79,49 @@ public:
 
     message_.morph(topic_info.md5sum, topic_info.message_type, info.response.definition, "false");
     publisher_ = message_.advertise(nh, topic_info.topic_name, 1);
+
+    configure_device_time_translator();
+  }
+
+  void configure_device_time_translator() {
+    // Clock parameters.
+    const uint64_t kArduinoOverflow = 1L << 32;  // 32 bit
+    const double kClockFrequency = 1e6;          // micros()
+    ctt::WrappingClockParameters cp(kArduinoOverflow, kClockFrequency);
+
+    // Namespace.
+    const bool kAppendDeviceTimeSubnamespace = true;
+    ROS_INFO_STREAM("ns: " << publisher_.getTopic());
+    ctt::NS ns(publisher_.getTopic(), kAppendDeviceTimeSubnamespace);
+
+    // Settings.
+    // TODO(rikba): Make switching time ROS parameter.
+    const double kSwitchingTime = 3600.0; // s
+    ctt::Defaults defaults;
+    defaults.setFilterAlgorithm(
+        ctt::FilterAlgorithm(ctt::FilterAlgorithm::Type::ConvexHull));
+    defaults.setSwitchTimeSecs(kSwitchingTime);
+
+    // Time translator.
+    device_time_translator_.reset(
+        new cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime(
+            cp, ns, defaults));
   }
 
   template <typename T>
-  void translateMsg(T msg, ros::Time* receive_stamp, std::shared_ptr<
-      cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime> device_time_translator) {
+  void translateMsg(T msg, ros::Time* receive_stamp) {
 
       // Translate timestamp
-      msg->translated_stamp.data = device_time_translator->update(msg->event_stamp, msg->transmit_stamp, *receive_stamp);
+      msg->translated_stamp.data = device_time_translator_->update(msg->event_stamp, msg->transmit_stamp, *receive_stamp);
 
+      //ROS_INFO_STREAM(*msg);
       // Serialize.
       ros::SerializedMessage ser_msg = ros::serialization::serializeMessage(*msg);
       ros::serialization::IStream stream(ser_msg.message_start, ser_msg.num_bytes);
       ros::serialization::Serializer<topic_tools::ShapeShifter>::read(stream, message_);
   }
 
-  void handleWithReceiveTime(ros::serialization::IStream stream, ros::Time* receive_stamp, std::shared_ptr<
-      cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime> device_time_translator) {
+  void handleWithReceiveTime(ros::serialization::IStream stream, ros::Time* receive_stamp) {
     // Deserialize message.
     ros::serialization::Serializer<topic_tools::ShapeShifter>::read(stream, message_);
 
@@ -100,7 +132,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (imu_msg) {
-      translateMsg<fm_comm::ImuMicroPtr>(imu_msg, receive_stamp, device_time_translator);
+      translateMsg<fm_comm::ImuMicroPtr>(imu_msg, receive_stamp);
     }
 
     fm_comm::LidarMicroPtr lidar_msg = nullptr;
@@ -109,7 +141,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (lidar_msg) {
-      translateMsg<fm_comm::LidarMicroPtr>(lidar_msg, receive_stamp, device_time_translator);
+      translateMsg<fm_comm::LidarMicroPtr>(lidar_msg, receive_stamp);
     }
 
     fm_comm::TimeNumberedPtr time_msg = nullptr;
@@ -118,7 +150,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (time_msg) {
-      translateMsg<fm_comm::TimeNumberedPtr>(time_msg, receive_stamp, device_time_translator);
+      translateMsg<fm_comm::TimeNumberedPtr>(time_msg, receive_stamp);
     }
 
     fm_comm::ULandingMicroPtr ulanding_msg = nullptr;
@@ -127,7 +159,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (ulanding_msg) {
-      translateMsg<fm_comm::ULandingMicroPtr>(ulanding_msg, receive_stamp, device_time_translator);
+      translateMsg<fm_comm::ULandingMicroPtr>(ulanding_msg, receive_stamp);
     }
 
     // Publish.
@@ -148,6 +180,10 @@ private:
   topic_tools::ShapeShifter message_;
 
   static ros::ServiceClient message_service_;
+
+
+  std::shared_ptr<ctt::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime>
+      device_time_translator_;
 };
 
 ros::ServiceClient Publisher::message_service_;
