@@ -50,8 +50,14 @@
 #include "rosserial_server/async_read_buffer.h"
 #include "rosserial_server/topic_handlers.h"
 
+#include <memory>
+#include <cuckoo_time_translator/ClockParameters.h>
+#include <cuckoo_time_translator/DeviceTimeTranslator.h>
+
 namespace rosserial_server
 {
+
+namespace ctt = cuckoo_time_translator;
 
 typedef std::vector<uint8_t> Buffer;
 typedef boost::shared_ptr<Buffer> BufferPtr;
@@ -69,6 +75,8 @@ public:
                          boost::bind(&Session::read_failed, this,
                                      boost::asio::placeholders::error))
   {
+    configure_device_time_translator();
+
     active_ = false;
 
     timeout_interval_ = boost::posix_time::milliseconds(5000);
@@ -397,7 +405,7 @@ private:
     ros::serialization::Serializer<rosserial_msgs::TopicInfo>::read(stream, topic_info);
 
     PublisherPtr pub(new Publisher(nh_, topic_info));
-    callbacks_[topic_info.topic_id] = boost::bind(&Publisher::handleWithReceiveTime, pub, _1, &transmit_stamp_, &receive_stamp_);
+    callbacks_[topic_info.topic_id] = boost::bind(&Publisher::handleWithReceiveTime, pub, _1, device_time_translator_, &transmit_stamp_, &receive_stamp_);
     publishers_[topic_info.topic_id] = pub;
 
     set_sync_timeout(timeout_interval_);
@@ -489,6 +497,31 @@ private:
     set_sync_timeout(timeout_interval_);
   }
 
+  void configure_device_time_translator() {
+    // Clock parameters.
+    const uint64_t kArduinoOverflow = 1L << 32;  // 32 bit
+    const double kClockFrequency = 1e6;          // micros()
+    ctt::WrappingClockParameters cp(kArduinoOverflow, kClockFrequency);
+
+    // Namespace.
+    const bool kAppendDeviceTimeSubnamespace = true;
+    ROS_INFO_STREAM("ns: " << nh_.getNamespace());
+    ctt::NS ns(nh_.getNamespace(), kAppendDeviceTimeSubnamespace);
+
+    // Settings.
+    // TODO(rikba): Make switching time ROS parameter.
+    const double kSwitchingTime = 100.0; // s
+    ctt::Defaults defaults;
+    defaults.setFilterAlgorithm(
+        ctt::FilterAlgorithm(ctt::FilterAlgorithm::Type::ConvexHull));
+    defaults.setSwitchTimeSecs(kSwitchingTime);
+
+    // Time translator.
+    device_time_translator_.reset(
+        new cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime(
+            cp, ns, defaults));
+  }
+
   Socket socket_;
   AsyncReadBuffer<Socket> async_read_buffer_;
   enum { buffer_max = 1023 };
@@ -513,6 +546,9 @@ private:
 
   ros::Time receive_stamp_;
   uint32_t transmit_stamp_;
+
+  std::shared_ptr<ctt::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime>
+      device_time_translator_;
 };
 
 }  // namespace
