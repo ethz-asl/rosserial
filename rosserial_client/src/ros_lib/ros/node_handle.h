@@ -514,26 +514,37 @@ public:
       return 0;
 
     /* serialize message */
-    int l = msg->serialize(message_out + 7);
+    int l = msg->serialize(message_out + 11);
 
     /* setup the header */
     message_out[0] = 0xff;
     message_out[1] = PROTOCOL_VER;
-    message_out[2] = (uint8_t)((uint16_t)l & 255);
-    message_out[3] = (uint8_t)((uint16_t)l >> 8);
-    message_out[4] = 255 - ((message_out[2] + message_out[3]) % 256);
-    message_out[5] = (uint8_t)((int16_t)id & 255);
-    message_out[6] = (uint8_t)((int16_t)id >> 8);
+
+    message_out[6] = (uint8_t)((uint16_t)l & 255);
+    message_out[7] = (uint8_t)((uint16_t)l >> 8);
+    message_out[8] = 255 - ((message_out[6] + message_out[7]) % 256);
+    message_out[9] = (uint8_t)((int16_t)id & 255);
+    message_out[10] = (uint8_t)((int16_t)id >> 8);
 
     /* calculate checksum */
     int chk = 0;
-    for (int i = 5; i < l + 7; i++)
+    for (int i = 9; i < l + 11; i++)
       chk += message_out[i];
-    l += 7;
+    l += 11;
     message_out[l++] = 255 - (chk % 256);
 
     if (l <= OUTPUT_SIZE)
     {
+      // Transmit stamp uint32_t.
+      uint32_t transmit_stamp = micros();
+      message_out[2] = (uint8_t)(transmit_stamp & 255);
+      transmit_stamp = transmit_stamp >> 8;
+      message_out[3] = (uint8_t)(transmit_stamp & 255);
+      transmit_stamp = transmit_stamp >> 8;
+      message_out[4] = (uint8_t)(transmit_stamp & 255);
+      transmit_stamp = transmit_stamp >> 8;
+      message_out[5] = (uint8_t)(transmit_stamp & 255);
+
       hardware_.write(message_out, l);
       return l;
     }

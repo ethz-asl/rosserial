@@ -109,10 +109,10 @@ public:
   }
 
   template <typename T>
-  void translateMsg(T msg, ros::Time* receive_stamp) {
+  void translateMsg(T msg, uint32_t* transmit_stamp, ros::Time* receive_stamp) {
 
       // Translate timestamp
-      msg->translated_stamp.data = device_time_translator_->update(msg->event_stamp, msg->transmit_stamp, *receive_stamp);
+      msg->translated_stamp.data = device_time_translator_->update(msg->event_stamp, *transmit_stamp, *receive_stamp);
 
       //ROS_INFO_STREAM(*msg);
       // Serialize.
@@ -121,7 +121,7 @@ public:
       ros::serialization::Serializer<topic_tools::ShapeShifter>::read(stream, message_);
   }
 
-  void handleWithReceiveTime(ros::serialization::IStream stream, ros::Time* receive_stamp) {
+  void handleWithReceiveTime(ros::serialization::IStream stream, uint32_t* transmit_stamp, ros::Time* receive_stamp) {
     // Deserialize message.
     ros::serialization::Serializer<topic_tools::ShapeShifter>::read(stream, message_);
 
@@ -132,7 +132,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (imu_msg) {
-      translateMsg<fm_comm::ImuMicroPtr>(imu_msg, receive_stamp);
+      translateMsg<fm_comm::ImuMicroPtr>(imu_msg, transmit_stamp, receive_stamp);
     }
 
     fm_comm::LidarMicroPtr lidar_msg = nullptr;
@@ -141,7 +141,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (lidar_msg) {
-      translateMsg<fm_comm::LidarMicroPtr>(lidar_msg, receive_stamp);
+      translateMsg<fm_comm::LidarMicroPtr>(lidar_msg, transmit_stamp, receive_stamp);
     }
 
     fm_comm::TimeNumberedPtr time_msg = nullptr;
@@ -150,7 +150,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (time_msg) {
-      translateMsg<fm_comm::TimeNumberedPtr>(time_msg, receive_stamp);
+      translateMsg<fm_comm::TimeNumberedPtr>(time_msg, transmit_stamp, receive_stamp);
     }
 
     fm_comm::ULandingMicroPtr ulanding_msg = nullptr;
@@ -159,7 +159,7 @@ public:
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (ulanding_msg) {
-      translateMsg<fm_comm::ULandingMicroPtr>(ulanding_msg, receive_stamp);
+      translateMsg<fm_comm::ULandingMicroPtr>(ulanding_msg, transmit_stamp, receive_stamp);
     }
 
     // Publish.

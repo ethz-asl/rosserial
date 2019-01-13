@@ -190,10 +190,16 @@ private:
     uint8_t sync;
     stream >> sync;
     if (sync == 0xfe) {
-      async_read_buffer_.read(5, boost::bind(&Session::read_id_length, this, _1));
+      async_read_buffer_.read(4, boost::bind(&Session::read_transmit_stamp, this, _1));
     } else {
       read_sync_header();
     }
+  }
+
+  void read_transmit_stamp(ros::serialization::IStream& stream) {
+    stream >> transmit_stamp_;
+    // TODO(rikba): checksum.
+    async_read_buffer_.read(5, boost::bind(&Session::read_id_length, this, _1));
   }
 
   void read_id_length(ros::serialization::IStream& stream) {
@@ -391,7 +397,7 @@ private:
     ros::serialization::Serializer<rosserial_msgs::TopicInfo>::read(stream, topic_info);
 
     PublisherPtr pub(new Publisher(nh_, topic_info));
-    callbacks_[topic_info.topic_id] = boost::bind(&Publisher::handleWithReceiveTime, pub, _1, &receive_stamp_);
+    callbacks_[topic_info.topic_id] = boost::bind(&Publisher::handleWithReceiveTime, pub, _1, &transmit_stamp_, &receive_stamp_);
     publishers_[topic_info.topic_id] = pub;
 
     set_sync_timeout(timeout_interval_);
@@ -506,6 +512,7 @@ private:
   std::map<std::string, ServiceClientPtr> services_;
 
   ros::Time receive_stamp_;
+  uint32_t transmit_stamp_;
 };
 
 }  // namespace
