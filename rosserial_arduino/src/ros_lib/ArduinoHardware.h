@@ -51,6 +51,8 @@
 #elif defined(_SAM3XA_)
   #include <UARTClass.h>  // Arduino Due
   #define SERIAL_CLASS UARTClass
+#elif defined(ARDUINO_SAMD_ZERO) //edited by Gabriel Waibel
+  #define SERIAL_CLASS Serial_
 #elif defined(USE_USBCON)
   // Arduino Leonardo USB Serial Port
   #define SERIAL_CLASS Serial_
@@ -62,19 +64,18 @@
   #define SERIAL_CLASS HardwareSerial
 #endif
 
-#include <util/atomic.h>
-
 class ArduinoHardware {
   public:
     ArduinoHardware(SERIAL_CLASS* io , long baud= 57600){
       iostream = io;
       baud_ = baud;
-      mus_now_ = 0ULL;
-      mus_prev_ = 0UL;
     }
     ArduinoHardware()
     {
-#if defined(USBCON) and !(defined(USE_USBCON))
+
+#if defined(ARDUINO_SAMD_ZERO)
+      iostream = &SerialUSB;
+#elif defined(USBCON) and !(defined(USE_USBCON))
       /* Leonardo support */
       iostream = &Serial1;
 #elif defined(USE_TEENSY_HW_SERIAL) or defined(USE_STM32_HW_SERIAL)
@@ -110,26 +111,10 @@ class ArduinoHardware {
     }
 
     unsigned long time(){return millis();}
-    unsigned long long time_micros() {
-      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        static_assert(sizeof(unsigned long long) == sizeof(uint64_t),
-            "Size of unsigned long long is not equal to uint64_t.");
-        static_assert(sizeof(unsigned long) == sizeof(uint32_t),
-            "Size of unsigned long is not equal to uint32_t.");
-      uint32_t mus = micros();
-        uint32_t mus_delta = mus - mus_prev_;
-        mus_now_ += mus_delta;
-        mus_prev_ = mus;
-      }
-      return mus_now_;
-    }
 
   protected:
     SERIAL_CLASS* iostream;
     long baud_;
-  private:
-    uint64_t mus_now_;
-    uint32_t mus_prev_;
 };
 
 #endif
