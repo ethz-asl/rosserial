@@ -46,7 +46,7 @@
 
 #include <fm_comm/ImuMicro.h>
 #include <fm_comm/LidarMicro.h>
-#include <fm_comm/TimeNumbered.h>
+#include <fm_comm/ImageTrigger.h>
 #include <fm_comm/ULandingMicro.h>
 
 namespace rosserial_server
@@ -118,13 +118,13 @@ public:
       translateMsg<fm_comm::LidarMicroPtr>(lidar_msg, device_time_translator, transmit_stamp, receive_stamp);
     }
 
-    fm_comm::TimeNumberedPtr time_msg = nullptr;
+    fm_comm::ImageTriggerPtr time_msg = nullptr;
     try {
-      time_msg = message_.instantiate<fm_comm::TimeNumbered>();
+      time_msg = message_.instantiate<fm_comm::ImageTrigger>();
     } catch (const topic_tools::ShapeShifterException& e) {
     }
     if (time_msg) {
-      translateMsg<fm_comm::TimeNumberedPtr>(time_msg, device_time_translator, transmit_stamp, receive_stamp);
+      translateMsg<fm_comm::ImageTriggerPtr>(time_msg, device_time_translator, transmit_stamp, receive_stamp);
     }
 
     fm_comm::ULandingMicroPtr ulanding_msg = nullptr;
