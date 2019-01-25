@@ -108,7 +108,6 @@ protected:
 
   /* time used for syncing */
   uint32_t rt_time;
-  uint64_t rt_time_micros;
 
   /* used for computing current time */
   uint32_t sec_offset, nsec_offset;
@@ -350,7 +349,7 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 0.1 * 500)))
+    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 500)))
     {
       requestSyncTime();
       last_sync_time = c_time;
@@ -374,18 +373,17 @@ public:
   {
     std_msgs::Time t;
     publish(TopicInfo::ID_TIME, &t);
-    rt_time_micros = hardware_.time_micros();
-    rt_time = rt_time_micros / 1000;
+    rt_time = hardware_.time();
   }
 
   void syncTime(uint8_t * data)
   {
     std_msgs::Time t;
-    uint64_t offset = hardware_.time_micros() - rt_time_micros;
+    uint32_t offset = hardware_.time() - rt_time;
 
     t.deserialize(data);
-    t.data.sec += offset / 1000000UL;
-    t.data.nsec += (offset % 1000000UL) * 1000;
+    t.data.sec += offset / 1000;
+    t.data.nsec += (offset % 1000) * 1000000UL;
 
     this->setNow(t.data);
     last_sync_receive_time = hardware_.time();
@@ -393,19 +391,19 @@ public:
 
   Time now()
   {
-    uint64_t mus = hardware_.time_micros();
+    uint32_t ms = hardware_.time();
     Time current_time;
-    current_time.sec = mus / 1000000UL + sec_offset;
-    current_time.nsec = (mus % 1000000UL) * 1000 + nsec_offset;
+    current_time.sec = ms / 1000 + sec_offset;
+    current_time.nsec = (ms % 1000) * 1000000UL + nsec_offset;
     normalizeSecNSec(current_time.sec, current_time.nsec);
     return current_time;
   }
 
   void setNow(Time & new_now)
   {
-    uint64_t mus = hardware_.time_micros();
-    sec_offset = new_now.sec - mus / 1000000UL - 1;
-    nsec_offset = new_now.nsec - (mus % 1000000UL) * 1000UL + 1000000000UL;
+    uint32_t ms = hardware_.time();
+    sec_offset = new_now.sec - ms / 1000 - 1;
+    nsec_offset = new_now.nsec - (ms % 1000) * 1000000UL + 1000000000UL;
     normalizeSecNSec(sec_offset, nsec_offset);
   }
 
@@ -654,6 +652,24 @@ public:
         //copy it over
         for (int i = 0; i < length; i++)
           strcpy(param[i], req_param_resp.strings[i]);
+        return true;
+      }
+      else
+      {
+        logwarn("Failed to get param: length mismatch");
+      }
+    }
+    return false;
+  }
+  bool getParam(const char* name, bool* param, int length = 1, int timeout = 1000)
+  {
+    if (requestParam(name, timeout))
+    {
+      if (length == req_param_resp.ints_length)
+      {
+        //copy it over
+        for (int i = 0; i < length; i++)
+          param[i] = req_param_resp.ints[i];
         return true;
       }
       else
