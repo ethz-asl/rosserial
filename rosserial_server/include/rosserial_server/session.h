@@ -252,10 +252,11 @@ private:
       ROS_WARN("Overrun on receive buffer. Attempting to regain rx sync.");
       read_sync_header();
     } else if (error) {
-      // When some other read error has occurred, stop the session, which destroys
-      // all known publishers and subscribers.
-      ROS_WARN_STREAM("Socket asio error, closing socket: " << error);
-      stop();
+      // When some other read error has occurred, delete the whole session, which destroys
+      // all publishers and subscribers.
+      socket_.cancel();
+      ROS_WARN_STREAM("Stopping session due to read error: " << error);
+      delete this;
     }
   }
 
@@ -289,6 +290,10 @@ private:
         ROS_WARN_THROTTLE(1, "Socket write operation returned IO error.");
       } else if (error == boost::system::errc::no_such_device) {
         ROS_WARN_THROTTLE(1, "Socket write operation returned no device.");
+      } else if (error == boost::system::errc::connection_reset) {
+        ROS_WARN_THROTTLE(1, "Socket write operation returned connection reset.");
+      } else if (error == boost::system::errc::broken_pipe) {
+        ROS_WARN_THROTTLE(1, "Socket write operation returned broken pipe.");
       } else {
         ROS_WARN_STREAM_THROTTLE(1, "Unknown error returned during write operation: " << error);
       }
@@ -318,6 +323,8 @@ private:
       ROS_DEBUG("Sync with device lost.");
       stop();
     }
+    ROS_WARN_STREAM("Sync with device lost (" << error << ")");
+    attempt_sync();
   }
 
   //// HELPERS ////
