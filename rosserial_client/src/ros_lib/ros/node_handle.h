@@ -107,10 +107,25 @@ protected:
   Hardware hardware_{};
 
   /* time used for syncing */
-  uint32_t rt_time{0};
+  uint64_t client_time_mus;
+  uint64_t host_time_mus;
 
-  /* used for computing current time */
-  uint32_t sec_offset{0}, nsec_offset{0};
+  /* States of Kalman filter for time estimation*/
+  uint64_t initial_clock_offset_mus;
+  double clock_offset_s;
+  double clock_skew;
+  double residual;
+  double dt;
+  double P11, P12, P21, P22; // P matrix
+  double K1, K2;             // Kalman Gain
+  bool clock_initialized;
+  bool request_sync;
+  bool sync_time;
+  const double Q_offset; // Covariance of determining dt.
+  const double Q_skew;   // Covariance of determining dt.
+  const double R;        // Measuring uncertainty.
+  bool new_ekf_available;
+  double innovation_offset, innovation_skew;
 
   /* Spinonce maximum work timeout */
   uint32_t spin_timeout_{0};
@@ -174,9 +189,10 @@ protected:
   bool configured_{false};
 
   /* used for syncing the time */
-  uint32_t last_sync_time{0};
-  uint32_t last_sync_receive_time{0};
-  uint32_t last_msg_timeout_time{0};
+  uint32_t last_sync_time;
+  uint64_t last_sync_time_mus;
+  uint32_t last_sync_receive_time;
+  uint32_t last_msg_timeout_time;
 
 public:
   /* This function goes in your loop() function, it handles
@@ -341,47 +357,101 @@ public:
   };
 
   /********************************************************************
-   * Time functions
+   * Time functions using a Kalman filtr adapted from the Cuckoo Time
+   * Translator (https://github.com/ethz-asl/cuckoo_time_translator)
    */
 
   void requestSyncTime()
   {
     std_msgs::Time t;
     publish(TopicInfo::ID_TIME, &t);
-    rt_time = hardware_.time();
+    last_sync_time_mus = client_time_mus;
+    client_time_mus = hardware_.time_micros();
   }
 
   void syncTime(uint8_t * data)
   {
     std_msgs::Time t;
-    uint32_t offset = hardware_.time() - rt_time;
+    // Time offset between request of timesync and recieved host time.
+    uint64_t offset_mus = hardware_.time_micros() - client_time_mus;
 
     t.deserialize(data);
-    t.data.sec += offset / 1000;
-    t.data.nsec += (offset % 1000) * 1000000UL;
 
-    this->setNow(t.data);
+    // Time on the host (would have been at the time of the request).
+    host_time_mus =
+        t.data.sec * 1000000ULL + t.data.nsec / 1000ULL - offset_mus / 2ULL;
+    if (clock_initialized) {
+      dt = ((double)(client_time_mus - last_sync_time_mus)) / 1000000.0;
+      // Prediction.
+      clock_offset_s = clock_offset_s + dt * clock_skew;
+      clock_skew = clock_skew;
+      P11 = P11 + dt * P21 + (P12 + dt * P22) * dt + Q_offset;
+      P12 = P12 + dt * P22;
+      P21 = P21 + dt * P22;
+      P22 = P22 + Q_skew;
+
+      // Update.
+      residual = ((double)(host_time_mus - initial_clock_offset_mus) -
+                  client_time_mus) /
+                     1000000.0 -
+                 clock_offset_s;
+      if (abs(residual) < 0.5) {
+        // Only do the update if the residual is withing certain limits.
+        double S_inv = 1.0 / (P11 + R);
+        K1 = P11 * S_inv;
+        K2 = P21 * S_inv;
+
+        clock_offset_s += K1 * residual;
+        clock_skew += K2 * residual;
+        innovation_offset = K1 * residual;
+        innovation_skew = K2 * residual;
+
+        double lmK1H1 = 1.0 - K1; // 1 - K1 * H1
+
+        P21 = -P11 * K2 + P21;
+        P22 = -P12 * K2 + P22;
+        P11 = P11 * lmK1H1;
+        P12 = P12 * lmK1H1;
+      }
+    } else {
+      // Init state.
+      initial_clock_offset_mus = host_time_mus - client_time_mus;
+      clock_offset_s = 0.6;
+      clock_skew = -0.0003;
+      P11 = 1.0e-5; // Initial offset sigma^2.
+      P12 = 0.0;
+      P21 = 0.0;
+      P22 = 1.0e-15; // Initial skew sigma^2.
+
+      clock_initialized = true;
+    }
     last_sync_receive_time = hardware_.time();
+    last_sync_time_mus = hardware_.time_micros();
+    new_ekf_available = true;
   }
 
-  Time now()
-  {
-    uint32_t ms = hardware_.time();
+  Time now() {
+    uint64_t mus = hardware_.time_micros();
+    uint64_t mus_corrected =
+        mus + initial_clock_offset_mus +
+        (int64_t)((clock_offset_s +
+                   clock_skew *
+                       ((long double)(mus - last_sync_time_mus) / 1000000.0)) *
+                  1000000.0);
     Time current_time;
-    current_time.sec = ms / 1000 + sec_offset;
-    current_time.nsec = (ms % 1000) * 1000000UL + nsec_offset;
+    current_time.sec = mus_corrected / 1000000ULL;
+    current_time.nsec = (mus_corrected % 1000000ULL) * 1000ULL;
     normalizeSecNSec(current_time.sec, current_time.nsec);
     return current_time;
   }
 
-  void setNow(const Time & new_now)
-  {
-    uint32_t ms = hardware_.time();
-    sec_offset = new_now.sec - ms / 1000 - 1;
-    nsec_offset = new_now.nsec - (ms % 1000) * 1000000UL + 1000000000UL;
-    normalizeSecNSec(sec_offset, nsec_offset);
-  }
-
+  double getResidual() { return residual; }
+  double getOffset() { return clock_offset_s; }
+  double getSkew() { return clock_skew; }
+  double getInnovationOffset() { return innovation_offset; }
+  double getInnovationSkew() { return innovation_skew; }
+  bool isNewEkfAvailable() { return new_ekf_available; }
+  void newEkfIsNotAvailable() { new_ekf_available = false; }
   /********************************************************************
    * Topic Management
    */
