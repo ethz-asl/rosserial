@@ -107,25 +107,25 @@ protected:
   Hardware hardware_{};
 
   /* time used for syncing */
-  uint64_t client_time_mus;
-  uint64_t host_time_mus;
+  uint64_t client_time_mus_{0};
+  uint64_t host_time_mus_{0};
 
   /* States of Kalman filter for time estimation*/
-  uint64_t initial_clock_offset_mus;
-  double clock_offset_s;
-  double clock_skew;
-  double residual;
-  double dt;
-  double P11, P12, P21, P22; // P matrix
-  double K1, K2;             // Kalman Gain
-  bool clock_initialized;
-  bool request_sync;
-  bool sync_time;
-  const double Q_offset; // Covariance of determining dt.
-  const double Q_skew;   // Covariance of determining dt.
-  const double R;        // Measuring uncertainty.
-  bool new_ekf_available;
-  double innovation_offset, innovation_skew;
+  uint64_t initial_clock_offset_mus_{0};
+  double clock_offset_s_{0};
+  double clock_skew_{0};
+  double residual_{0};
+  double dt_{0};
+  double P11_{0}, P12_{0}, P21_{0}, P22_{0}; // P matrix
+  double K1_{0}, K2_{0};             // Kalman Gain
+  bool clock_initialized_{false};
+  bool request_sync_{false};
+  bool sync_time_{false};
+  const double Q_offset_{1.0e-5}; // Covariance of determining dt.
+  const double Q_skew_{8.0e-10};   // Covariance of determining dt.
+  const double R_{5.0e-3};        // Measuring uncertainty.
+  bool new_ekf_available_{false};
+  double innovation_offset_{0}, innovation_skew_{0};
 
   /* Spinonce maximum work timeout */
   uint32_t spin_timeout_{0};
@@ -189,10 +189,10 @@ protected:
   bool configured_{false};
 
   /* used for syncing the time */
-  uint32_t last_sync_time;
-  uint64_t last_sync_time_mus;
-  uint32_t last_sync_receive_time;
-  uint32_t last_msg_timeout_time;
+  uint32_t last_sync_time_{0};
+  uint64_t last_sync_time_mus_{0};
+  uint32_t last_sync_receive_time_{0};
+  uint32_t last_msg_timeout_time_{0};
 
 public:
   /* This function goes in your loop() function, it handles
@@ -204,7 +204,7 @@ public:
   {
     /* restart if timed out */
     uint32_t c_time = hardware_.time();
-    if ((c_time - last_sync_receive_time) > (SYNC_SECONDS * 2200))
+    if ((c_time - last_sync_receive_time_) > (SYNC_SECONDS * 2200))
     {
       configured_ = false;
     }
@@ -212,7 +212,7 @@ public:
     /* reset if message has timed out */
     if (mode_ != MODE_FIRST_FF)
     {
-      if (c_time > last_msg_timeout_time)
+      if (c_time > last_msg_timeout_time_)
       {
         mode_ = MODE_FIRST_FF;
       }
@@ -250,7 +250,7 @@ public:
         if (data == 0xff)
         {
           mode_++;
-          last_msg_timeout_time = c_time + SERIAL_MSG_TIMEOUT;
+          last_msg_timeout_time_ = c_time + SERIAL_MSG_TIMEOUT;
         }
         else if (hardware_.time() - c_time > (SYNC_SECONDS * 1000))
         {
@@ -313,8 +313,8 @@ public:
           {
             requestSyncTime();
             negotiateTopics();
-            last_sync_time = c_time;
-            last_sync_receive_time = c_time;
+            last_sync_time_ = c_time;
+            last_sync_receive_time_ = c_time;
             return SPIN_ERR;
           }
           else if (topic_ == TopicInfo::ID_TIME)
@@ -340,10 +340,10 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time) > (SYNC_SECONDS * 500)))
+    if (configured_ && ((c_time - last_sync_time_) > (SYNC_SECONDS * 500)))
     {
       requestSyncTime();
-      last_sync_time = c_time;
+      last_sync_time_ = c_time;
     }
 
     return SPIN_OK;
@@ -365,78 +365,78 @@ public:
   {
     std_msgs::Time t;
     publish(TopicInfo::ID_TIME, &t);
-    last_sync_time_mus = client_time_mus;
-    client_time_mus = hardware_.time_micros();
+    last_sync_time_mus_ = client_time_mus_;
+    client_time_mus_ = hardware_.time_micros();
   }
 
   void syncTime(uint8_t * data)
   {
     std_msgs::Time t;
     // Time offset between request of timesync and recieved host time.
-    uint64_t offset_mus = hardware_.time_micros() - client_time_mus;
+    uint64_t offset_mus = hardware_.time_micros() - client_time_mus_;
 
     t.deserialize(data);
 
     // Time on the host (would have been at the time of the request).
-    host_time_mus =
+    host_time_mus_ =
         t.data.sec * 1000000ULL + t.data.nsec / 1000ULL - offset_mus / 2ULL;
-    if (clock_initialized) {
-      dt = ((double)(client_time_mus - last_sync_time_mus)) / 1000000.0;
+    if (clock_initialized_) {
+      dt_ = ((double)(client_time_mus_ - last_sync_time_mus_)) / 1000000.0;
       // Prediction.
-      clock_offset_s = clock_offset_s + dt * clock_skew;
-      clock_skew = clock_skew;
-      P11 = P11 + dt * P21 + (P12 + dt * P22) * dt + Q_offset;
-      P12 = P12 + dt * P22;
-      P21 = P21 + dt * P22;
-      P22 = P22 + Q_skew;
+      clock_offset_s_ = clock_offset_s_ + dt_ * clock_skew_;
+      clock_skew_ = clock_skew_;
+      P11_ = P11_ + dt_ * P21_ + (P12_ + dt_ * P22_) * dt_ + Q_offset_;
+      P12_ = P12_ + dt_ * P22_;
+      P21_ = P21_ + dt_ * P22_;
+      P22_ = P22_ + Q_skew_;
 
       // Update.
-      residual = ((double)(host_time_mus - initial_clock_offset_mus) -
-                  client_time_mus) /
+      residual_ = ((double)(host_time_mus_ - initial_clock_offset_mus_) -
+                  client_time_mus_) /
                      1000000.0 -
-                 clock_offset_s;
-      if (abs(residual) < 0.5) {
+                 clock_offset_s_;
+      if (abs(residual_) < 0.5) {
         // Only do the update if the residual is withing certain limits.
-        double S_inv = 1.0 / (P11 + R);
-        K1 = P11 * S_inv;
-        K2 = P21 * S_inv;
+        double S_inv = 1.0 / (P11_ + R_);
+        K1_ = P11_ * S_inv;
+        K2_ = P21_ * S_inv;
 
-        clock_offset_s += K1 * residual;
-        clock_skew += K2 * residual;
-        innovation_offset = K1 * residual;
-        innovation_skew = K2 * residual;
+        clock_offset_s_ += K1_ * residual_;
+        clock_skew_ += K2_ * residual_;
+        innovation_offset_ = K1_ * residual_;
+        innovation_skew_ = K2_ * residual_;
 
-        double lmK1H1 = 1.0 - K1; // 1 - K1 * H1
+        double lmK1H1 = 1.0 - K1_; // 1 - K1 * H1
 
-        P21 = -P11 * K2 + P21;
-        P22 = -P12 * K2 + P22;
-        P11 = P11 * lmK1H1;
-        P12 = P12 * lmK1H1;
+        P21_ = -P11_ * K2_ + P21_;
+        P22_ = -P12_ * K2_ + P22_;
+        P11_ = P11_ * lmK1H1;
+        P12_ = P12_ * lmK1H1;
       }
     } else {
       // Init state.
-      initial_clock_offset_mus = host_time_mus - client_time_mus;
-      clock_offset_s = 0.6;
-      clock_skew = -0.0003;
-      P11 = 1.0e-5; // Initial offset sigma^2.
-      P12 = 0.0;
-      P21 = 0.0;
-      P22 = 1.0e-15; // Initial skew sigma^2.
+      initial_clock_offset_mus_ = host_time_mus_ - client_time_mus_;
+      clock_offset_s_ = 0.6;
+      clock_skew_ = -0.0003;
+      P11_ = 1.0e-5; // Initial offset sigma^2.
+      P12_ = 0.0;
+      P21_ = 0.0;
+      P22_ = 1.0e-15; // Initial skew sigma^2.
 
-      clock_initialized = true;
+      clock_initialized_ = true;
     }
-    last_sync_receive_time = hardware_.time();
-    last_sync_time_mus = hardware_.time_micros();
-    new_ekf_available = true;
+    last_sync_receive_time_ = hardware_.time();
+    last_sync_time_mus_ = hardware_.time_micros();
+    new_ekf_available_ = true;
   }
 
   Time now() {
     uint64_t mus = hardware_.time_micros();
     uint64_t mus_corrected =
-        mus + initial_clock_offset_mus +
-        (int64_t)((clock_offset_s +
-                   clock_skew *
-                       ((long double)(mus - last_sync_time_mus) / 1000000.0)) *
+        mus + initial_clock_offset_mus_ +
+        (int64_t)((clock_offset_s_ +
+                   clock_skew_ *
+                       ((long double)(mus - last_sync_time_mus_) / 1000000.0)) *
                   1000000.0);
     Time current_time;
     current_time.sec = mus_corrected / 1000000ULL;
@@ -445,13 +445,13 @@ public:
     return current_time;
   }
 
-  double getResidual() { return residual; }
-  double getOffset() { return clock_offset_s; }
-  double getSkew() { return clock_skew; }
-  double getInnovationOffset() { return innovation_offset; }
-  double getInnovationSkew() { return innovation_skew; }
-  bool isNewEkfAvailable() { return new_ekf_available; }
-  void newEkfIsNotAvailable() { new_ekf_available = false; }
+  double getResidual() { return residual_; }
+  double getOffset() { return clock_offset_s_; }
+  double getSkew() { return clock_skew_; }
+  double getInnovationOffset() { return innovation_offset_; }
+  double getInnovationSkew() { return innovation_skew_; }
+  bool isNewEkfAvailable() { return new_ekf_available_; }
+  void newEkfIsNotAvailable() { new_ekf_available_ = false; }
   /********************************************************************
    * Topic Management
    */
