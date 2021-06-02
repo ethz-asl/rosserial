@@ -340,7 +340,7 @@ public:
     }
 
     /* occasionally sync time */
-    if (configured_ && ((c_time - last_sync_time_) > (SYNC_SECONDS * 500)))
+    if (configured_ && ((c_time - last_sync_time_) > (SYNC_SECONDS * 200)))
     {
       requestSyncTime();
       last_sync_time_ = c_time;
@@ -416,8 +416,8 @@ public:
     } else {
       // Init state.
       initial_clock_offset_mus_ = host_time_mus_ - client_time_mus_;
-      clock_offset_s_ = 0.6;
-      clock_skew_ = -0.0003;
+      clock_offset_s_ = 0.5;
+      clock_skew_ = -0.0006;
       P11_ = 1.0e-5; // Initial offset sigma^2.
       P12_ = 0.0;
       P21_ = 0.0;
